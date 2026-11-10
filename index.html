@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alfa Holdback Signing — Zach Sprague</title>
+<style>
+  :root { --ink:#17221e; --muted:#52625b; --line:#ccd7d2; --accent:#b92730; --accent-dark:#8e1d25;
+          --surface:#fff; --surface-2:#f5f8f7; --bg:#edf2f0; --green:#176c49; --green-bg:#e4f4eb;
+          --error:#9c2830; --error-bg:#fae8e9; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif; line-height:1.45; }
+  .shell { width:min(100%, 860px); margin:0 auto; padding:28px 14px 52px; }
+  .intro h1 { margin:0 0 6px; font-family: Georgia, "Times New Roman", serif; font-size:clamp(27px,6vw,38px); }
+  .intro p { margin:0 0 18px; color:var(--muted); font-size:16px; }
+  .sheet { position:relative; width:100%; aspect-ratio: 595 / 842; background:#fff;
+           box-shadow:0 10px 34px rgba(25,43,36,.18); margin:0 auto 18px; overflow:hidden; }
+  .sheet img.form { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  /* Signature line on Alfa's page 2: x 5.5%..72.1%, y 50.6% from top (measured on the scope scan). */
+  .sigzone { position:absolute; left:5.2%; bottom:49.15%; width:31%; height:5.4%; }
+  .sigzone img { position:absolute; left:0; bottom:0; max-width:100%; max-height:100%; object-fit:contain; object-position:left bottom; }
+  .sigzone .typed { position:absolute; left:0; bottom:-2px; white-space:nowrap; transform-origin:left bottom;
+                    font-family:"Brush Script MT","Segoe Script",cursive; font-size:44px; line-height:1; color:#10160f; }
+  .datezone { position:absolute; left:40.5%; bottom:49.35%; font-family:"Times New Roman",serif; font-style:italic;
+              font-size:clamp(11px, 2.6vw, 19px); color:#10160f; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:24px;
+          box-shadow:0 18px 55px rgba(25,43,36,.12); }
+  .section-title { margin:0 0 6px; font-size:22px; }
+  .affidavit { margin:0 0 18px; color:var(--muted); font-family:Georgia,serif; font-style:italic; font-size:15px; }
+  .tabs { display:flex; gap:8px; margin-bottom:14px; }
+  .tab { min-width:92px; padding:10px 16px; border:1px solid var(--line); border-radius:999px;
+         background:var(--surface-2); font-weight:800; cursor:pointer; }
+  .tab[aria-selected="true"] { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .sig-box { width:100%; min-height:120px; padding:18px; border:2px dashed var(--line); border-radius:12px;
+             background:var(--surface-2); display:grid; place-items:center; cursor:pointer; color:var(--muted); text-align:center; }
+  .sig-box img { max-width:100%; height:84px; object-fit:contain; }
+  .type-panel, .draw-panel { display:none; }
+  .type-panel.active, .draw-panel.active { display:block; }
+  .field-label { display:block; margin-bottom:7px; font-weight:800; }
+  .text-input, .date-input { width:100%; min-height:50px; border:1px solid var(--line); border-radius:10px;
+                             background:var(--surface); color:var(--ink); padding:11px 13px; font:inherit; }
+  .typed-preview { min-height:96px; margin-top:10px; border-bottom:1px solid var(--ink); display:flex;
+                   align-items:flex-end; justify-content:center; padding:12px 10px 7px;
+                   font-family:"Brush Script MT","Segoe Script",cursive; font-size:clamp(32px,9vw,50px); line-height:1; }
+  .details-grid { display:grid; grid-template-columns:1fr 180px; gap:16px; margin-top:22px; }
+  .printed { min-height:50px; display:flex; align-items:center; padding:11px 13px; border:1px solid var(--line);
+             border-radius:10px; background:var(--surface-2); font-weight:700; }
+  .consent { display:grid; grid-template-columns:23px 1fr; gap:12px; margin:22px 0 0; padding:16px;
+             border:1px solid var(--line); border-radius:12px; background:var(--surface-2); cursor:pointer; }
+  .consent input { width:22px; height:22px; accent-color:var(--accent); }
+  .consent span { font-size:14px; }
+  .validation { min-height:23px; margin:10px 0 0; color:var(--error); font-size:14px; font-weight:700; }
+  .send-btn { width:100%; min-height:56px; margin-top:8px; border:0; border-radius:12px; background:var(--accent);
+              color:#fff; font-weight:850; font-size:17px; cursor:pointer; }
+  .send-btn:disabled { opacity:.66; cursor:wait; }
+  .status { display:none; margin-top:16px; padding:15px 16px; border-radius:10px; font-weight:750; }
+  .status.show { display:block; }
+  .status.success { color:var(--green); background:var(--green-bg); }
+  .status.failure { color:var(--error); background:var(--error-bg); }
+  .security-note { margin:14px 2px 0; color:var(--muted); text-align:center; font-size:12px; }
+  .modal { position:fixed; inset:0; z-index:20; display:none; background:rgba(8,15,12,.78);
+           align-items:center; justify-content:center; padding:14px; }
+  .modal.open { display:flex; }
+  .modal-card { width:min(940px,100%); max-height:96vh; background:var(--surface); border-radius:16px; overflow:hidden; }
+  .modal-head { display:flex; justify-content:space-between; align-items:center; padding:16px 18px; border-bottom:1px solid var(--line); }
+  .modal-head h2 { margin:0; font-size:20px; }
+  .close-btn { border:0; background:transparent; color:var(--muted); font-weight:800; cursor:pointer; padding:8px; }
+  .pad-wrap { padding:14px; background:var(--surface-2); }
+  #signaturePad { display:block; width:100%; height:min(54vh,430px); background:#fff; border:1px solid #bfc8c3;
+                  border-radius:8px; touch-action:none; cursor:crosshair; }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; padding:14px 18px 18px; flex-wrap:wrap; }
+  .action-btn { min-height:46px; padding:10px 18px; border:1px solid var(--line); border-radius:9px;
+                background:var(--surface); font-weight:800; cursor:pointer; }
+  .action-btn.primary { border-color:var(--accent); background:var(--accent); color:#fff; }
+  @media (max-width:590px){ .details-grid{ grid-template-columns:1fr; } }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<main class="shell">
+  <section class="intro">
+    <h1>Sign Alfa's completion form</h1>
+    <p>Below is Alfa's own form from your claim file — the cover sheet and the completion statement,
+       exactly as Alfa issued them. Review both pages, sign at the bottom of page 2, and send it back.
+       It goes straight to RoofLife so Alfa can release your remaining claim payment.</p>
+  </section>
+
+  <div class="sheet"><img class="form" src="form-p1.jpg" alt="Alfa claim cover sheet"></div>
+  <div class="sheet" id="sheet2">
+    <img class="form" src="form-p2.jpg" alt="Alfa completion statement">
+    <div class="sigzone" id="sigZone"></div>
+    <div class="datezone" id="dateZone"></div>
+  </div>
+
+  <section class="card">
+    <h2 class="section-title">Add your signature</h2>
+    <p class="affidavit">&ldquo;Your signature below is your affidavit that the work as specified in the estimate of repair or replacement has been completed.&rdquo;</p>
+
+    <div class="tabs" role="tablist" aria-label="Signature method">
+      <button class="tab" id="drawTab" type="button" aria-selected="true">Draw</button>
+      <button class="tab" id="typeTab" type="button" aria-selected="false">Type</button>
+    </div>
+
+    <div class="draw-panel active" id="drawPanel">
+      <button class="sig-box" id="openPad" type="button">
+        <span id="drawPrompt"><strong style="display:block;color:var(--ink);font-size:17px;margin-bottom:4px">Tap to sign</strong>A larger signature pad will open.</span>
+        <img id="drawnPreview" alt="Your drawn signature" hidden>
+      </button>
+    </div>
+
+    <div class="type-panel" id="typePanel">
+      <label class="field-label" for="typedName">Type your signature</label>
+      <input class="text-input" id="typedName" autocomplete="name" placeholder="Type your full name">
+      <div class="typed-preview" id="typedPreview">Your signature</div>
+    </div>
+
+    <div class="details-grid">
+      <div><span class="field-label">Printed name</span><div class="printed">Zachary Scott Sprague</div></div>
+      <div><label class="field-label" for="signDate">Date</label><input class="date-input" id="signDate" type="date" required></div>
+    </div>
+
+    <label class="consent">
+      <input id="consent" type="checkbox" required>
+      <span>I confirm the work described in Alfa's estimate is complete and agree that my electronic signature may be applied to this statement.</span>
+    </label>
+
+    <p class="validation" id="validation" role="alert"></p>
+    <button class="send-btn" id="sendButton" type="button">Finish &amp; Send</button>
+    <div class="status" id="status" role="status"></div>
+    <p class="security-note">Please tap once and keep this page open until the confirmation appears.</p>
+  </section>
+</main>
+
+<div class="modal" id="padModal" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-head"><h2>Draw your signature</h2><button class="close-btn" id="closePad" type="button">Cancel</button></div>
+    <div class="pad-wrap"><canvas id="signaturePad"></canvas></div>
+    <div class="modal-actions">
+      <button class="action-btn" id="undoPad" type="button">Undo</button>
+      <button class="action-btn" id="clearPad" type="button">Clear</button>
+      <button class="action-btn primary" id="donePad" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  /* Return route for the signed PDF — filled in at publish time. */
+  var ENDPOINT = "https://script.google.com/macros/s/AKfycbwfFtu66WgrVre0CVfaZvd5EJEB3IfHgDt8WH6MMSC9cLPY5T_zYUU55dZyHphMIeCY/exec";
+  var PERSON = "Zach Sprague";
+  var PRINTED = "Zachary Scott Sprague";
+  var JOB = "25-2706";
+  var CLAIM = "H0001248897";
+  var PROPERTY = "3456 Warrenton Rd, Montgomery, AL 36111-2123";
+  var DOCNAME = "Alfa Statement of Completion and Satisfaction (carrier scope form)";
+
+  var mode = "draw";
+  var drawnSignature = "";   // dataURL png, trimmed
+  var dateInput = document.getElementById("signDate");
+  var typedName = document.getElementById("typedName");
+  var sigZone = document.getElementById("sigZone");
+  var dateZone = document.getElementById("dateZone");
+
+  function fmtDate(iso) {
+    if (!iso) return "";
+    var p = iso.split("-");
+    return Number(p[1]) + "/" + Number(p[2]) + "/" + p[0];
+  }
+  function fmtDatePad(iso) {
+    if (!iso) return "";
+    var p = iso.split("-");
+    return p[1] + "/" + p[2] + "/" + p[0];
+  }
+
+  function renderZone() {
+    var html = "";
+    if (mode === "draw" && drawnSignature) {
+      html = '<img src="' + drawnSignature + '" alt="">';
+    } else if (mode === "type" && typedName.value.trim()) {
+      html = '<div class="typed" id="typedSig">' + typedName.value.trim().replace(/[<>&]/g, "") + '</div>';
+    }
+    sigZone.innerHTML = html;
+    var t = document.getElementById("typedSig");
+    if (t) {
+      var w = t.scrollWidth, zoneW = sigZone.clientWidth;
+      if (w > zoneW) t.style.transform = "scale(" + (zoneW / w).toFixed(3) + ")";
+    }
+    dateZone.textContent = fmtDate(dateInput.value);
+  }
+
+  var now = new Date();
+  var localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  dateInput.value = localToday;
+  dateInput.addEventListener("change", renderZone);
+
+  /* ---- signature controls ---- */
+  var drawTab = document.getElementById("drawTab"), typeTab = document.getElementById("typeTab");
+  var drawPanel = document.getElementById("drawPanel"), typePanel = document.getElementById("typePanel");
+  var typedPreview = document.getElementById("typedPreview");
+  function setMode(m) {
+    mode = m;
+    drawTab.setAttribute("aria-selected", String(m === "draw"));
+    typeTab.setAttribute("aria-selected", String(m === "type"));
+    drawPanel.classList.toggle("active", m === "draw");
+    typePanel.classList.toggle("active", m === "type");
+    document.getElementById("validation").textContent = "";
+    renderZone();
+  }
+  drawTab.addEventListener("click", function () { setMode("draw"); });
+  typeTab.addEventListener("click", function () { setMode("type"); typedName.focus(); });
+  typedName.addEventListener("input", function () {
+    typedPreview.textContent = typedName.value.trim() || "Your signature";
+    renderZone();
+  });
+
+  /* ---- draw pad ---- */
+  var modal = document.getElementById("padModal");
+  var canvas = document.getElementById("signaturePad");
+  var ctx = canvas.getContext("2d");
+  var drawing = false, moved = false, lastPoint = null, undoStack = [], savedBeforeOpen = "";
+  function sizeCanvas() {
+    var rect = canvas.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var prev = savedBeforeOpen || (canvas.width ? canvas.toDataURL("image/png") : "");
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 3; ctx.strokeStyle = "#15201b";
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, rect.width, rect.height);
+    if (prev) loadImg(prev);
+  }
+  function loadImg(src) {
+    var im = new Image();
+    im.onload = function () {
+      var rect = canvas.getBoundingClientRect();
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, rect.width, rect.height);
+      ctx.drawImage(im, 0, 0, rect.width, rect.height);
+    };
+    im.src = src;
+  }
+  function pt(e) { var r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  canvas.addEventListener("pointerdown", function (e) {
+    e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+    undoStack.push(canvas.toDataURL("image/png")); if (undoStack.length > 20) undoStack.shift();
+    drawing = true; moved = false; lastPoint = pt(e);
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!drawing) return; e.preventDefault();
+    var p = pt(e);
+    ctx.beginPath(); ctx.moveTo(lastPoint.x, lastPoint.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    lastPoint = p; moved = true;
+  });
+  function stopDraw(e) {
+    if (!drawing) return;
+    if (!moved && lastPoint) { ctx.beginPath(); ctx.arc(lastPoint.x, lastPoint.y, 1.5, 0, Math.PI * 2); ctx.fillStyle = "#15201b"; ctx.fill(); }
+    drawing = false;
+  }
+  canvas.addEventListener("pointerup", stopDraw);
+  canvas.addEventListener("pointercancel", stopDraw);
+
+  /* Trim transparent margins off the pad and export the signature. */
+  function exportSignature() {
+    var w = canvas.width, h = canvas.height;
+    var data = ctx.getImageData(0, 0, w, h).data;
+    var minX = w, minY = h, maxX = -1, maxY = -1;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var i = (y * w + x) * 4;
+        if (!(data[i] > 245 && data[i + 1] > 245 && data[i + 2] > 245)) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return "";
+    var pad = 6;
+    minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+    maxX = Math.min(w - 1, maxX + pad); maxY = Math.min(h - 1, maxY + pad);
+    var out = document.createElement("canvas");
+    out.width = maxX - minX + 1; out.height = maxY - minY + 1;
+    out.getContext("2d").drawImage(canvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+    return out.toDataURL("image/png");
+  }
+  function canvasHasInk() {
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    var dark = 0;
+    for (var i = 0; i < data.length; i += 16) {
+      if (data[i] < 180 || data[i + 1] < 180 || data[i + 2] < 180) { dark++; if (dark > 60) return true; }
+    }
+    return false;
+  }
+
+  function openPad() {
+    savedBeforeOpen = drawnSignature;
+    undoStack = [];
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(sizeCanvas);
+  }
+  function closePad() { modal.classList.remove("open"); document.body.style.overflow = ""; }
+  document.getElementById("openPad").addEventListener("click", openPad);
+  document.getElementById("closePad").addEventListener("click", closePad);
+  document.getElementById("clearPad").addEventListener("click", function () {
+    undoStack.push(canvas.toDataURL("image/png"));
+    var r = canvas.getBoundingClientRect();
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, r.width, r.height);
+  });
+  document.getElementById("undoPad").addEventListener("click", function () {
+    if (undoStack.length) loadImg(undoStack.pop());
+  });
+  document.getElementById("donePad").addEventListener("click", function () {
+    if (!canvasHasInk()) { drawnSignature = ""; }
+    else { drawnSignature = exportSignature(); }
+    var prev = document.getElementById("drawnPreview");
+    if (drawnSignature) { prev.src = drawnSignature; prev.hidden = false; document.getElementById("drawPrompt").hidden = true; }
+    closePad();
+    renderZone();
+  });
+
+  /* ---- validation + PDF build + send ---- */
+  function validate() {
+    var msg = "";
+    if (mode === "draw" && !drawnSignature) msg = "Please add your signature.";
+    if (mode === "type" && !typedName.value.trim()) msg = "Please type your signature.";
+    if (!dateInput.value) msg = "Please enter the signing date.";
+    if (!document.getElementById("consent").checked) msg = "Please confirm the statement before sending.";
+    document.getElementById("validation").textContent = msg;
+    return !msg;
+  }
+
+  function loadImageEl(src) {
+    return new Promise(function (res, rej) {
+      var im = new Image();
+      im.onload = function () { res(im); };
+      im.onerror = rej;
+      im.src = src;
+    });
+  }
+  /* Render typed signature text to a PNG dataURL in a script font. */
+  function typedSignatureImage(text) {
+    var c = document.createElement("canvas");
+    var g = c.getContext("2d");
+    var font = '90px "Brush Script MT", "Segoe Script", cursive';
+    g.font = font;
+    var w = Math.ceil(g.measureText(text).width) + 30;
+    c.width = w; c.height = 130;
+    g = c.getContext("2d");
+    g.font = font; g.fillStyle = "#10160f"; g.textBaseline = "middle";
+    g.fillText(text, 12, 72);
+    return c.toDataURL("image/png");
+  }
+  function sigImageNatural(src) {
+    return new Promise(function (res, rej) {
+      var im = new Image();
+      im.onload = function () { res({ w: im.naturalWidth, h: im.naturalHeight }); };
+      im.onerror = rej;
+      im.src = src;
+    });
+  }
+
+  document.getElementById("sendButton").addEventListener("click", async function () {
+    var button = this;
+    var status = document.getElementById("status");
+    status.className = "status"; status.textContent = "";
+    if (!validate()) return;
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      status.className = "status failure show";
+      status.textContent = "The document tools did not load. Please check your connection and try again.";
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "Preparing your statement…";
+    try {
+      var sigSrc = (mode === "draw") ? drawnSignature : typedSignatureImage(typedName.value.trim());
+      /* Guard: never send a statement whose signature is missing. */
+      var nat = await sigImageNatural(sigSrc);
+      if (!nat.w || !nat.h) throw new Error("signature missing");
+
+      var pdf = new window.jspdf.jsPDF({ orientation: "portrait", unit: "pt", format: "a4", compress: true });
+      var PW = 595.28, PH = 841.89;
+      pdf.setProperties({ title: "Signed holdback - " + PERSON + " - " + JOB, author: PRINTED, creator: "RoofLife" });
+      pdf.addImage("form-p1.jpg", "JPEG", 0, 0, PW, PH, undefined, "FAST");
+      pdf.addPage();
+      pdf.addImage("form-p2.jpg", "JPEG", 0, 0, PW, PH, undefined, "FAST");
+      /* Signature on Alfa's line: line y = 426pt from top; x starts 33pt. */
+      var sigW = 180, sigH = sigW * nat.h / nat.w;
+      if (sigH > 34) { sigH = 34; sigW = sigH * nat.w / nat.h; }
+      pdf.addImage(sigSrc, "PNG", 35, 426 - sigH + 2, sigW, sigH, undefined, "FAST");
+      pdf.setFont("times", "italic"); pdf.setFontSize(13.5); pdf.setTextColor(20, 20, 20);
+      pdf.text(fmtDatePad(dateInput.value), 240, 423);
+
+      /* Signing details page (electronic signature record). */
+      pdf.addPage();
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFont("times", "bold"); pdf.setFontSize(17);
+      pdf.text("Signing details", 48, 70);
+      pdf.setFont("times", "normal"); pdf.setFontSize(11.5);
+      var tnow = new Date();
+      var chicago = tnow.toLocaleString("en-US", { timeZone: "America/Chicago" });
+      var rows = [
+        ["Document", DOCNAME],
+        ["Job", "RoofLife job " + JOB + " — " + PERSON],
+        ["Claim", CLAIM],
+        ["Property", PROPERTY],
+        ["Signed by", PRINTED],
+        ["Signature method", mode === "draw" ? "Drawn on screen" : "Typed"],
+        ["Date signed", fmtDate(dateInput.value)],
+        ["Time signed", chicago + " (America/Chicago)"],
+        ["Consent", "Signer confirmed the work is complete and agreed the electronic signature may be applied to the statement."],
+        ["Delivery", "Signed PDF delivered to RoofLife for filing and release of the recoverable depreciation."]
+      ];
+      var y = 100;
+      rows.forEach(function (r) {
+        pdf.setFont("times", "bold"); pdf.text(r[0], 48, y);
+        pdf.setFont("times", "normal");
+        var lines = pdf.splitTextToSize(r[1], PW - 48 - 170);
+        pdf.text(lines, 170, y);
+        y += 16 * lines.length + 8;
+      });
+
+      var dataUri = pdf.output("datauristring");
+      var pdfBase64 = dataUri.substring(dataUri.indexOf(",") + 1);
+      var payload = {
+        pdfBase64: pdfBase64,
+        filename: "Signed holdback - " + PERSON + " - " + JOB + ".pdf",
+        subject: "Signed holdback — " + PERSON + " " + JOB,
+        body: "Signed Alfa completion statement (carrier scope form) attached for " + PERSON + " (job " + JOB + ", claim " + CLAIM + ")."
+      };
+      button.textContent = "Sending…";
+      await fetch(ENDPOINT, {
+        method: "POST", mode: "no-cors", credentials: "omit",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload)
+      });
+      status.className = "status success show";
+      status.textContent = "Sent! Your signed completion statement has been delivered to RoofLife.";
+      button.textContent = "Sent";
+    } catch (err) {
+      status.className = "status failure show";
+      status.textContent = "We couldn't send the statement. Please check your connection and try again.";
+      button.disabled = false;
+      button.textContent = "Finish & Send";
+    }
+  });
+
+  renderZone();
+})();
+</script>
+</body>
+</html>
